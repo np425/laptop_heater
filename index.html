@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-Time WebSocket Slider and CPU Temperatures</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: Arial, sans-serif;
+      margin-top: 50px;
+      font-size: 1.5em; /* Increase overall font size */
+    }
+    .slider-container {
+      width: 400px; /* Make slider wider */
+      margin-bottom: 30px;
+    }
+    .slider {
+      width: 100%;
+      height: 20px; /* Increase slider height */
+    }
+    .value-display {
+      font-size: 1.8em; /* Larger font for value display */
+      margin-top: 15px;
+    }
+    #temperatureContainer {
+      margin-top: 30px;
+      text-align: center;
+    }
+    .temperature {
+      font-size: 1.6em; /* Increase font size for temperatures */
+      margin: 10px 0; /* Add more spacing between temperatures */
+    }
+    h1, h2 {
+      font-size: 2em; /* Larger headers */
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Temperature Control</h1>
+  
+  <div class="slider-container">
+    <input type="range" id="slider" min="0" max="100" value="50" class="slider">
+    <p>Laptop Temperature Target: <span id="sliderValue">50</span>°C</p>
+  </div>
+
+  <h2>Real-Time CPU Core Temperatures</h2>
+  <div id="temperatureContainer"></div>
+
+  <script>
+    // Define the port for WebSocket connection
+    const port = 8080;  // Adjust this to match the server port
+    const socket = new WebSocket(`ws://localhost:${port}`);
+
+    const slider = document.getElementById('slider');
+    const sliderValueDisplay = document.getElementById('sliderValue');
+    const temperatureContainer = document.getElementById('temperatureContainer');
+    let isUpdatingFromServer = false;  // Flag to prevent loops
+
+    // Display connection status
+    socket.addEventListener('open', () => {
+      console.log("Connected to WebSocket server");
+    });
+
+    // Display disconnect status
+    socket.addEventListener('close', () => {
+      console.log("Disconnected from WebSocket server");
+    });
+
+    // Handle errors
+    socket.addEventListener('error', (error) => {
+      console.error("WebSocket error:", error);
+    });
+
+    // Listen for messages from the server to update slider and core temperatures
+    socket.addEventListener('message', (event) => {
+      const data = JSON.parse(event.data);
+
+      // Update slider value if received from server
+      if (data.sliderValue !== undefined) {
+        isUpdatingFromServer = true;  // Set flag to avoid loop
+        slider.value = data.sliderValue;
+        sliderValueDisplay.textContent = data.sliderValue;
+        isUpdatingFromServer = false;
+      }
+
+      // Update core temperatures if received from server
+      if (data.coreTemperatures) {
+        displayTemperatures(data.coreTemperatures);
+      }
+    });
+
+    // Update slider value display and send value through WebSocket when changed locally
+    slider.addEventListener('input', () => {
+      if (!isUpdatingFromServer) {  // Only send if the change is from this client
+        const value = slider.value;
+        sliderValueDisplay.textContent = value;
+
+        // Send slider value to WebSocket server
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ sliderValue: value }));
+        }
+      }
+    });
+
+    // Function to display temperatures for each core
+    function displayTemperatures(coreTemperatures) {
+      temperatureContainer.innerHTML = '';  // Clear previous data
+      coreTemperatures.forEach(core => {
+        const tempElement = document.createElement('div');
+        tempElement.className = 'temperature';
+        tempElement.textContent = `Core ${core.core}: ${core.temperature.toFixed(2)}°C`;
+        temperatureContainer.appendChild(tempElement);
+      });
+    }
+  </script>
+</body>
+</html>
